@@ -36,7 +36,7 @@ You will receive real-time M1 OHLCV candle data and current account state. Analy
 Respond with ONE word on the first line:
   BUY   — open a long position (gold price expected to rise)
   SELL  — open a short position (gold price expected to fall)
-  HOLD  — no clear edge, do not trade
+ 
 
 Then on the second line write one short sentence (max 15 words) explaining your reasoning based purely on the current price data.
 No markdown, no extra text, no greetings, no labels.
@@ -74,29 +74,16 @@ Strong SELL signals (look for confluence of multiple):
 - Series of red candles with small upper wicks showing sustained selling pressure
 - Price breaking below a recent swing low with follow-through
 
-HOLD — do not trade when:
-- Candles are small, choppy, and directionless
-- Price is ranging tightly with no clear breakout
-- The spread is large relative to the ATR (more than 30% of ATR)
-- There is no clear confluence of signals pointing one direction
-- An identical direction position is already open
 
 === CORE PRINCIPLE ===
 Every decision is based purely on what the current price data shows.
 Never factor in previous trades, win/loss history, or what the last signal was.
 A fresh chart deserves a fresh, unbiased analysis every single time.
-When in doubt, HOLD — a missed trade is always better than a bad trade.`;
 
 function parseDecision(content) {
   const upper   = content.toUpperCase();
   const hasBuy  = upper.includes("BUY");
   const hasSell = upper.includes("SELL");
-
-  let decision = "HOLD";
-  if      (hasBuy && !hasSell)  decision = "BUY";
-  else if (hasSell && !hasBuy)  decision = "SELL";
-  else if (hasBuy && hasSell)
-    decision = upper.indexOf("BUY") < upper.indexOf("SELL") ? "BUY" : "SELL";
 
   const lines  = content.trim().split("\n");
   const reason = lines.slice(1).join(" ").trim();
@@ -162,5 +149,6 @@ app.listen(PORT, () => {
   if (BRIDGE_SECRET === "changeme123") console.warn("  ⚠️  Using default BRIDGE_API_KEY — change it!");
   console.log("=".repeat(50));
 });
+
 
 
