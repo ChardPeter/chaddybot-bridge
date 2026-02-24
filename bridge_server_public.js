@@ -1,89 +1,75 @@
 // ============================================================
-//  ChaddyBot — Public Bridge Server (Production)
-//  Deployable to Railway / Render / VPS
+//  ChaddyBot — Public Bridge Server
+//  XAUUSD — Forces BUY or SELL, no HOLD
 //
-//  Environment variables to set on your host:
-//    OPENAI_API_KEY   = sk-...
-//    BRIDGE_API_KEY   = any secret password you choose
-//                       (MT5 must send this in every request)
-//    PORT             = (set automatically by Railway/Render)
+//  Environment variables to set on Railway:
+//    OPENAI_API_KEY  = sk-...
+//    PORT            = (set automatically by Railway)
 // ============================================================
 
 const express = require("express");
 const app     = express();
 app.use(express.json({ limit: "1mb" }));
 
-const PORT          = process.env.PORT          || 3000;
-const OPENAI_KEY    = process.env.OPENAI_API_KEY || "" ;
-const BRIDGE_SECRET = process.env.BRIDGE_API_KEY || "1234" ; // ← set this!
-const MODEL         = "gpt-4o";
+const PORT       = process.env.PORT          || 3000;
+const OPENAI_KEY = process.env.OPENAI_API_KEY || "";
+const MODEL      = "gpt-4o";
 
-// ── Security: reject requests without the correct secret key ──
-// MT5 sends this in the X-API-Key header on every request
-function requireAuth(req, res, next) {
-  const key = req.headers["x-api-key"];
-  if (!key || key !== BRIDGE_SECRET) {
-    console.warn(`[${new Date().toISOString()}] ❌ Unauthorised request from ${req.ip}`);
-    return res.status(401).json({ error: "Unauthorised" });
-  }
-  next();
-}
-
-const SYSTEM_PROMPT = `You are an expert XAUUSD (Gold/USD) trading signal engine.
-
-You will receive real-time M1 OHLCV candle data and current account state. Analyse ONLY the price action and market data in front of you. Every decision must be a completely fresh, independent analysis — ignore any previous trade outcomes, streaks, or history. Each signal stands entirely on its own merit.
-
-Respond with ONE word on the first line:
-  BUY   — open a long position (gold price expected to rise)
-  SELL  — open a short position (gold price expected to fall)
- 
-
-Then on the second line write one short sentence (max 15 words) explaining your reasoning based purely on the current price data.
-No markdown, no extra text, no greetings, no labels.
-
-Example response:
-BUY
-Price breaking above resistance with strong bullish momentum on recent candles.
-
-=== XAUUSD MARKET KNOWLEDGE ===
-
-Gold price characteristics:
-- Gold is priced in USD — a weakening dollar typically pushes gold UP
-- Gold is a safe-haven — fear and uncertainty push gold UP
-- Gold reacts strongly to US interest rate expectations
-- Gold is highly sensitive to US data releases (NFP, CPI, FOMC)
-- Asian session (Tokyo) tends to be quiet and range-bound
-- London open (08:00 GMT) and New York open (13:00 GMT) bring the highest volatility and clearest trends
-- Gold moves in strong persistent trends — once direction is established it tends to continue
-- Key psychological round numbers (2000, 2100, 2200, 2300 etc.) are strong support/resistance levels
-- Gold spreads are much wider than forex — a wide spread relative to ATR means avoid trading
-
-=== TECHNICAL ANALYSIS RULES ===
-
-Strong BUY signals (look for confluence of multiple):
-- Price making consistent higher highs and higher lows
-- Bullish engulfing or strong up-candle after a pullback to support
-- Price bouncing off a clearly established support level with momentum
-- Series of green candles with small lower wicks showing sustained buying pressure
-- Price breaking above a recent swing high with follow-through
-
-Strong SELL signals (look for confluence of multiple):
-- Price making consistent lower highs and lower lows
-- Bearish engulfing or strong down-candle at resistance
-- Price rejecting a clearly established resistance level with momentum
-- Series of red candles with small upper wicks showing sustained selling pressure
-- Price breaking below a recent swing low with follow-through
-
-
-=== CORE PRINCIPLE ===
-Every decision is based purely on what the current price data shows.
-Never factor in previous trades, win/loss history, or what the last signal was.
-A fresh chart deserves a fresh, unbiased analysis every single time.
+const SYSTEM_PROMPT =
+  "You are an expert XAUUSD (Gold/USD) trading signal engine.\n\n" +
+  "You will receive real-time M1 OHLCV candle data and current account state.\n" +
+  "Your job is to analyse the price action and commit to the most probable direction.\n" +
+  "Every decision must be completely fresh and independent.\n\n" +
+  "You MUST respond with either BUY or SELL. No exceptions. Never say HOLD or anything else.\n" +
+  "When signals are mixed, weigh up the evidence and pick whichever direction has more support.\n\n" +
+  "Respond with ONE word on the first line — BUY or SELL.\n" +
+  "Then on the second line write one short sentence (max 15 words) explaining your reasoning.\n" +
+  "No markdown, no extra text, no greetings, no labels.\n\n" +
+  "Example:\n" +
+  "BUY\n" +
+  "Price holding above support with bullish momentum building on recent candles.\n\n" +
+  "=== XAUUSD MARKET KNOWLEDGE ===\n\n" +
+  "- Gold priced in USD — weakening dollar pushes gold UP\n" +
+  "- Safe-haven asset — fear and uncertainty push gold UP\n" +
+  "- Sensitive to US interest rates, NFP, CPI, and FOMC events\n" +
+  "- Asian session tends to drift slowly — London (08:00 GMT) and NY (13:00 GMT) produce strongest moves\n" +
+  "- Gold trends strongly — favour the direction already in motion\n" +
+  "- Round numbers (2000, 2100, 2200, 2300 etc.) act as strong support and resistance\n\n" +
+  "=== BUY when you see ===\n" +
+  "- Higher highs and higher lows forming\n" +
+  "- Bullish engulfing or strong green candle after a pullback\n" +
+  "- Price bouncing off support with momentum\n" +
+  "- Consecutive green candles with small lower wicks\n" +
+  "- Break above a recent swing high\n\n" +
+  "=== SELL when you see ===\n" +
+  "- Lower highs and lower lows forming\n" +
+  "- Bearish engulfing or strong red candle at resistance\n" +
+  "- Price rejecting resistance with momentum\n" +
+  "- Consecutive red candles with small upper wicks\n" +
+  "- Break below a recent swing low\n\n" +
+  "=== FINAL RULE ===\n" +
+  "Always output BUY or SELL. Never output anything else.\n" +
+  "When in doubt pick the direction with the most evidence. There is always a most likely direction.";
 
 function parseDecision(content) {
   const upper   = content.toUpperCase();
   const hasBuy  = upper.includes("BUY");
   const hasSell = upper.includes("SELL");
+
+  // Always resolve to BUY or SELL — never HOLD
+  let decision;
+  if (hasBuy && !hasSell) {
+    decision = "BUY";
+  } else if (hasSell && !hasBuy) {
+    decision = "SELL";
+  } else if (hasBuy && hasSell) {
+    // Both mentioned — pick whichever came first
+    decision = upper.indexOf("BUY") < upper.indexOf("SELL") ? "BUY" : "SELL";
+  } else {
+    // AI gave something unexpected — default to BUY and log it
+    console.warn("  ⚠️  AI returned neither BUY nor SELL — raw: " + content.substring(0, 80));
+    decision = "BUY";
+  }
 
   const lines  = content.trim().split("\n");
   const reason = lines.slice(1).join(" ").trim();
@@ -95,11 +81,11 @@ async function getAIDecision(marketContext) {
     method: "POST",
     headers: {
       "Content-Type":  "application/json",
-      "Authorization": `Bearer ${OPENAI_KEY}`,
+      "Authorization": "Bearer " + OPENAI_KEY,
     },
     body: JSON.stringify({
       model:       MODEL,
-      max_tokens:  60,
+      max_tokens:  80,
       temperature: 0.2,
       messages: [
         { role: "system", content: SYSTEM_PROMPT },
@@ -110,45 +96,41 @@ async function getAIDecision(marketContext) {
 
   const data = await response.json();
   if (data.error) throw new Error(data.error.message);
-  const content = data?.choices?.[0]?.message?.content;
+  const content = data && data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
   if (!content)  throw new Error("Empty content from OpenAI");
-  return { ...parseDecision(content), usage: data.usage };
+  return Object.assign(parseDecision(content), { usage: data.usage });
 }
 
-// ── Public health check (no auth needed — just confirms server is up)
-app.get("/health", (req, res) => {
-  res.json({ status: "ok", model: MODEL, time: new Date().toISOString() });
+app.get("/health", function(req, res) {
+  res.json({ status: "ok", model: MODEL, instrument: "XAUUSD", time: new Date().toISOString() });
 });
 
-// ── Signal endpoint (auth required)
-app.post("/signal", requireAuth, async (req, res) => {
-  const marketData = req.body?.market_data;
+app.post("/signal", async function(req, res) {
+  const marketData = req.body && req.body.market_data;
   if (!marketData) {
-    return res.status(400).json({ decision: "HOLD", reason: "No market_data provided" });
+    return res.status(400).json({ decision: "BUY", reason: "No market_data provided" });
   }
 
-  console.log(`[${new Date().toISOString()}] /signal from ${req.ip} (${marketData.length} chars)`);
+  console.log("[" + new Date().toISOString() + "] /signal (" + marketData.length + " chars)");
 
   try {
     const result = await getAIDecision(marketData);
-    console.log(`  → ${result.decision} | ${result.reason}`);
-    if (result.usage) console.log(`  → Tokens: ${result.usage.total_tokens}`);
+    console.log("  -> " + result.decision + " | " + result.reason);
+    if (result.usage) console.log("  -> Tokens: " + result.usage.total_tokens);
     res.json({ decision: result.decision, reason: result.reason });
   } catch (err) {
-    console.error("❌ Error:", err.message);
-    res.status(500).json({ decision: "HOLD", reason: "Server error: " + err.message });
+    console.error("Error:", err.message);
+    // Even on error, return a direction rather than failing silently
+    res.status(500).json({ decision: "BUY", reason: "Server error: " + err.message });
   }
 });
 
-app.listen(PORT, () => {
-  console.log("=".repeat(50));
-  console.log(`  ChaddyBot AI Bridge (Public)`);
-  console.log(`  Port: ${PORT}`);
-  console.log(`  Model: ${MODEL}`);
-  if (!OPENAI_KEY)    console.warn("  ⚠️  OPENAI_API_KEY not set!");
-  if (BRIDGE_SECRET === "changeme123") console.warn("  ⚠️  Using default BRIDGE_API_KEY — change it!");
-  console.log("=".repeat(50));
+app.listen(PORT, function() {
+  var line = "==================================================";
+  console.log(line);
+  console.log("  ChaddyBot AI Bridge — XAUUSD (BUY/SELL only)");
+  console.log("  Port: " + PORT);
+  console.log("  Model: " + MODEL);
+  if (!OPENAI_KEY) console.warn("  WARNING: OPENAI_API_KEY not set!");
+  console.log(line);
 });
-
-
-
