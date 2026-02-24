@@ -1,7 +1,6 @@
 {
-  "name": "chadybot-bridge",
+  "name": "chaddybot-bridge",
   "version": "1.0.0",
-  "description": "ChaddyBot AI Bridge Server",
   "main": "bridge_server_public.js",
   "scripts": {
     "start": "node bridge_server_public.js"
