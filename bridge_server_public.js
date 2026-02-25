@@ -21,7 +21,7 @@ const SYSTEM_PROMPT =
   "Your job is to analyse the price action and commit to the most probable direction.\n" +
   "Every decision must be completely fresh and independent.\n\n" +
   "You MUST respond with either BUY or SELL. No exceptions. Never say HOLD or anything else.\n" +
-  "When signals are mixed, weigh up the evidence and pick whichever direction has more support.\n\n" +
+  "weigh up the evidence and pick whichever direction will most likely result in at least 10% change in market price" +
   "Respond with ONE word on the first line — BUY or SELL.\n" +
   "Then on the second line write one short sentence (max 15 words) explaining your reasoning.\n" +
   "No markdown, no extra text, no greetings, no labels.\n\n" +
@@ -134,3 +134,4 @@ app.listen(PORT, function() {
   if (!OPENAI_KEY) console.warn("  WARNING: OPENAI_API_KEY not set!");
   console.log(line);
 });
+
