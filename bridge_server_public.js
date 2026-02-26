@@ -15,7 +15,7 @@ app.use(express.json({ limit: "1mb" }));
 
 const PORT          = process.env.PORT          || 3000;
 const OPENAI_KEY    = process.env.OPENAI_API_KEY || "";
-const BRIDGE_SECRET = process.env.BRIDGE_API_KEY || ""; // ← set this!
+const BRIDGE_SECRET = process.env.BRIDGE_API_KEY || "1234"; // ← set this!
 const MODEL         = "gpt-4o";
 
 // ── Security: reject requests without the correct secret key ──
@@ -164,3 +164,4 @@ app.listen(PORT, () => {
   if (BRIDGE_SECRET === "changeme123") console.warn("  ⚠️  Using default BRIDGE_API_KEY — change it!");
   console.log("=".repeat(50));
 });
+
