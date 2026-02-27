@@ -40,10 +40,7 @@ CRITICAL RULES FOR THE JSON:
 - No extra fields, no markdown, no explanation outside the JSON object
 - You MUST always pick the best possible action given ALL available data — never default to HOLD out of uncertainty alone
 
-SESSIONS — only trade during these GMT windows:
-- London open:     07:00–10:00 GMT  (highest gold liquidity)
-- NY open overlap: 12:00–15:00 GMT  (strongest momentum)
-- AVOID:           20:00–00:00 GMT  (thin liquidity, stop hunts common)
+SESSIONS — trade 24/7. There are no restricted hours. Enter trades at any time of day or night.
 - Outside sessions: decision must be HOLD
 
 ENTRY RULES — ALL conditions must be true simultaneously:
