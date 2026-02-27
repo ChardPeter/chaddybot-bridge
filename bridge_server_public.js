@@ -34,9 +34,9 @@ current price, open trade status, entry price, current P&L in pips, and last
 3 candle directions on M15.
 
 SESSIONS: Only trade during these windows (GMT):
-- London open: 07:00–10:00 (highest gold liquidity)
+- London open: 00:00–23:59 (highest gold liquidity)
 - NY open overlap: 12:00–15:00 (strongest momentum moves)
-- AVOID: 20:00–00:00 GMT (thin liquidity, stop hunts common)
+//- AVOID: 20:00–00:00 GMT (thin liquidity, stop hunts common)
 
 ENTRY RULES:
 - BUY: EMA8 crosses above EMA21 + RSI between 45–65 + last 2 M15 candles bullish 
@@ -208,5 +208,6 @@ app.listen(PORT, () => {
   if (BRIDGE_SECRET === "changeme123") console.warn("  ⚠️  Using default BRIDGE_API_KEY — change it!");
   console.log("=".repeat(50));
 });
+
 
 
