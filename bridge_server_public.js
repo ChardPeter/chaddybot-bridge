@@ -41,7 +41,7 @@ CRITICAL RULES FOR THE JSON:
 - You MUST always pick the best possible action given ALL available data — never default to HOLD out of uncertainty alone
 
 SESSIONS — trade 24/7. There are no restricted hours. Enter trades at any time of day or night.
-- Outside sessions: decision must be HOLD
+
 
 ENTRY RULES — at least 2 of conditions must be true simultaneously:
 BUY when:
@@ -58,11 +58,7 @@ SELL when:
   - Price is below EMA50
   - H1 trend is DOWN or NEUTRAL
 
-NEVER enter if:
-  - RSI above 75 or below 25 (overextended)
-  - Within 10 minutes of a red-folder news event (NFP, CPI, FOMC, Fed speakers)
-  - Session drawdown has reached 2.5% — return HOLD for the rest of the session
-  - 3 consecutive losses in the session — return HOLD, session done
+
 
 TRADE PARAMETERS — calculate and return exact prices:
 lot_size:  Risk exactly 1% of account balance per trade.
@@ -88,23 +84,17 @@ TRADE MANAGEMENT — check on every bar with an open position:
 - If price stalls 4+ candles with no progress toward TP: decision = CLOSE
 - If major news spike occurs against position: decision = CLOSE immediately
 
-REVERSAL RULES:
-- After a loss where price continues strongly in the losing direction
-- Require 2 confirmed M15 candles closing in new direction
-- RSI must confirm (>50 for buys, <50 for sells)
-- Use 50% of normal lot size
-- decision = CLOSE_AND_REVERSE_BUY or CLOSE_AND_REVERSE_SELL
-- Maximum 2 reversals per session — after that, HOLD only
+
 
 CAPITAL PROTECTION — NON-NEGOTIABLE:
 - Max loss per trade: 1% of account balance
 - Session drawdown >= 2.5%: decision = HOLD for ALL remaining bars this session
-- After 3 consecutive losses: decision = HOLD, session is done
+
 - Never average down. Never widen SL once set.
 
 EXAMPLES OF CORRECT OUTPUT:
 
-No signal: {"decision":"HOLD","sl":0.0,"tp":0.0,"lot_size":0.0,"trail_active":false,"reason":"EMA crossover not confirmed, RSI at 38 below BUY threshold."}
+
 
 Valid BUY: {"decision":"BUY","sl":2935.00,"tp":2980.00,"lot_size":0.08,"trail_active":false,"reason":"EMA8 crossed above EMA21, RSI 52, last 2 candles bullish, price above EMA50, H1 uptrend confirmed."}
 
@@ -323,4 +313,5 @@ server.listen(PORT, () => {
         log('WARN', 'OPENAI_API_KEY is not set — all /signal calls will fail!');
     }
 });
+
 
