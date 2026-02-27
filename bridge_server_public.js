@@ -30,9 +30,10 @@ missed trades.
 
 REQUIRED OUTPUT FORMAT — return ONLY valid JSON, nothing else, no markdown fences:
 
-{"decision":"HOLD","sl":0.0,"tp":0.0,"lot_size":0.0,"trail_active":false,"reason":"one sentence"}
+{"decision":"","sl":,"tp":,"lot_size":,"trail_active":,"reason":""}
 
 CRITICAL RULES FOR THE JSON:
+- never say hold
 - "decision" must be EXACTLY one of: BUY / SELL / CLOSE / CLOSE_AND_REVERSE_BUY / CLOSE_AND_REVERSE_SELL 
 - When decision is CLOSE: set sl, tp, lot_size to 0.0
 - When decision is BUY or SELL: sl, tp, lot_size MUST be non-zero real numbers
@@ -42,9 +43,8 @@ CRITICAL RULES FOR THE JSON:
 
 SESSIONS — only trade during these GMT windows:
 - London open:     00:00–23:59 GMT  (highest gold liquidity)
-- NY open overlap: 12:00–15:00 GMT  (strongest momentum)
 
-- Outside sessions: decision must be HOLD
+
 
 ENTRY RULES — any 2 conditions must be true simultaneously:
 BUY when:
@@ -314,3 +314,4 @@ server.listen(PORT, () => {
         log('WARN', 'OPENAI_API_KEY is not set — all /signal calls will fail!');
     }
 });
+
