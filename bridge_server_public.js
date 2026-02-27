@@ -2,7 +2,7 @@
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  ChaddyBot Bridge Server — JavaScript / Node.js
-//  Receives market data from MT5, calls Claude AI, returns a trade decision.
+//  Receives market data from MT5, calls OpenAI, returns a trade decision.
 //
 //  Deploy on Railway:
 //    1. Push this folder to GitHub
@@ -11,17 +11,17 @@
 //    4. Railway auto-detects Node and runs: node server.js
 // ─────────────────────────────────────────────────────────────────────────────
 
-const http       = require('http');
-const https      = require('https');
-const { URL }    = require('url');
+const http    = require('http');
+const https   = require('https');
+const { URL } = require('url');
 
 // ── Config ────────────────────────────────────────────────────────────────────
-const PORT          = process.env.PORT          || 3000;
-const BRIDGE_API_KEY = process.env.BRIDGE_API_KEY || '1234';   // Must match MT5 input
-const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || ''; // Your Claude API key
-const MODEL         = 'claude-opus-4-5';
-const MAX_TOKENS    = 512;   // Decision JSON is small — no need for more
-const REQUEST_TIMEOUT_MS = 25000; // 25 s — safely under Railway's 30 s limit
+const PORT               = process.env.PORT          || 3000;
+const BRIDGE_API_KEY     = process.env.BRIDGE_API_KEY || '1234';
+const OPENAI_API_KEY     = process.env.OPENAI_API_KEY || '';
+const MODEL              = 'gpt-4o';
+const MAX_TOKENS         = 3000;
+const REQUEST_TIMEOUT_MS = 25000;
 
 // ── System prompt (your trading rules) ───────────────────────────────────────
 const SYSTEM_PROMPT = `You are an XAU/USD (Gold) MT5 trading bot. Each bar you receive live market data and must
@@ -33,20 +33,20 @@ REQUIRED OUTPUT FORMAT — return ONLY valid JSON, nothing else, no markdown fen
 {"decision":"HOLD","sl":0.0,"tp":0.0,"lot_size":0.0,"trail_active":false,"reason":"one sentence"}
 
 CRITICAL RULES FOR THE JSON:
-- "decision" must be EXACTLY one of: BUY / SELL / CLOSE / CLOSE_AND_REVERSE_BUY / CLOSE_AND_REVERSE_SELL / HOLD
-- When decision is HOLD or CLOSE: set sl, tp, lot_size to 0.0
+- "decision" must be EXACTLY one of: BUY / SELL / CLOSE / CLOSE_AND_REVERSE_BUY / CLOSE_AND_REVERSE_SELL 
+- When decision is CLOSE: set sl, tp, lot_size to 0.0
 - When decision is BUY or SELL: sl, tp, lot_size MUST be non-zero real numbers
-- When decision is BUY or SELL but entry conditions are NOT met: use "HOLD" instead — never send BUY/SELL with zero sl/tp/lot_size
-- trail_active: true only when an open trade has reached +150 pips profit
+- trail_active: true only when an open trade has reached +15 pips profit
 - No extra fields, no markdown, no explanation outside the JSON object
+- You MUST always pick the best possible action given ALL available data — never default to HOLD out of uncertainty alone
 
 SESSIONS — only trade during these GMT windows:
-- London open:     07:00–10:00 GMT  (highest gold liquidity)
+- London open:     00:00–23:59 GMT  (highest gold liquidity)
 - NY open overlap: 12:00–15:00 GMT  (strongest momentum)
-- AVOID:           20:00–00:00 GMT  (thin liquidity, stop hunts common)
+
 - Outside sessions: decision must be HOLD
 
-ENTRY RULES — ALL conditions must be true simultaneously:
+ENTRY RULES — any 2 conditions must be true simultaneously:
 BUY when:
   - EMA8 crosses above EMA21 (confirmed on closed candle)
   - RSI between 45 and 65
@@ -61,12 +61,6 @@ SELL when:
   - Price is below EMA50
   - H1 trend is DOWN or NEUTRAL
 
-NEVER enter if:
-  - RSI above 75 or below 25 (overextended)
-  - Within 10 minutes of a red-folder news event (NFP, CPI, FOMC, Fed speakers)
-  - Session drawdown has reached 2.5% — return HOLD for the rest of the session
-  - 3 consecutive losses in the session — return HOLD, session done
-  - Conditions are ambiguous or only partially met → HOLD
 
 TRADE PARAMETERS — calculate and return exact prices:
 lot_size:  Risk exactly 1% of account balance per trade.
@@ -80,8 +74,8 @@ sl:  Absolute price, 150 pips from entry.
 
 tp:  Absolute price, 300 pips from entry (2:1 RR minimum).
      If ATR14 > 180.0 price units (= 1800 pips): extend TP to 450 pips (45.0 units).
-     BUY:  tp = ask + 30.0  (300 pips)  or ask + 45.0  (450 pips on strong trend days)
-     SELL: tp = bid - 30.0  (300 pips)  or bid - 45.0
+     BUY:  tp = ask + 30.0  (or ask + 45.0 on strong trend days)
+     SELL: tp = bid - 30.0  (or bid - 45.0)
 
 Example: ask = 2950.00 → sl = 2935.00, tp = 2980.00
 
@@ -98,23 +92,16 @@ REVERSAL RULES:
 - RSI must confirm (>50 for buys, <50 for sells)
 - Use 50% of normal lot size
 - decision = CLOSE_AND_REVERSE_BUY or CLOSE_AND_REVERSE_SELL
-- Maximum 2 reversals per session — after that, HOLD only
+- Maximum 2 reversals per session 
 
 CAPITAL PROTECTION — NON-NEGOTIABLE:
 - Max loss per trade: 1% of account balance
-- Session drawdown >= 2.5%: decision = HOLD for ALL remaining bars this session
-- After 3 consecutive losses: decision = HOLD, session is done
+
 - Never average down. Never widen SL once set.
 
 EXAMPLES OF CORRECT OUTPUT:
 
-No signal: {"decision":"HOLD","sl":0.0,"tp":0.0,"lot_size":0.0,"trail_active":false,"reason":"EMA crossover not confirmed, RSI at 38 below BUY threshold."}
-
-Valid BUY: {"decision":"BUY","sl":2935.00,"tp":2980.00,"lot_size":0.08,"trail_active":false,"reason":"EMA8 crossed above EMA21, RSI 52, last 2 candles bullish, price above EMA50, H1 uptrend confirmed."}
-
-Trail on: {"decision":"HOLD","sl":0.0,"tp":0.0,"lot_size":0.0,"trail_active":true,"reason":"Trade at +160 pips, trailing stop now active."}
-
-Close:    {"decision":"CLOSE","sl":0.0,"tp":0.0,"lot_size":0.0,"trail_active":false,"reason":"Price moved 80 pips adverse and M15 momentum reversed bearish."}`;
+signal: {"decision":"","sl":,"tp":,"lot_size":0.01,"trail_active":,"reason":""}`;
 
 // ── Logging ───────────────────────────────────────────────────────────────────
 function log(level, msg, data) {
@@ -127,36 +114,36 @@ function log(level, msg, data) {
 function sendJson(res, status, obj) {
     const body = JSON.stringify(obj);
     res.writeHead(status, {
-        'Content-Type':  'application/json',
+        'Content-Type':   'application/json',
         'Content-Length': Buffer.byteLength(body),
     });
     res.end(body);
 }
 
-// ── HOLD fallback — returned whenever something goes wrong ───────────────────
-function holdResponse(reason) {
+// ── Error fallback — only used when the server itself errors, not for AI logic ─
+function errorResponse(reason) {
     return {
-        decision:    'HOLD',
-        sl:          0.0,
-        tp:          0.0,
-        lot_size:    0.0,
+        decision:     'HOLD',
+        sl:           0.0,
+        tp:           0.0,
+        lot_size:     0.0,
         trail_active: false,
         reason,
     };
 }
 
-// ── Call Claude API ───────────────────────────────────────────────────────────
-function callClaude(marketData) {
+// ── Call OpenAI API ───────────────────────────────────────────────────────────
+function callOpenAI(marketData) {
     return new Promise((resolve, reject) => {
-        if (!ANTHROPIC_API_KEY) {
-            return reject(new Error('ANTHROPIC_API_KEY is not set'));
+        if (!OPENAI_API_KEY) {
+            return reject(new Error('OPENAI_API_KEY is not set'));
         }
 
         const payload = JSON.stringify({
             model:      MODEL,
             max_tokens: MAX_TOKENS,
-            system:     SYSTEM_PROMPT,
             messages: [
+                { role: 'system', content: SYSTEM_PROMPT },
                 {
                     role:    'user',
                     content: `Here is the current market data. Analyse it and return your JSON decision:\n\n${marketData}`,
@@ -165,14 +152,13 @@ function callClaude(marketData) {
         });
 
         const options = {
-            hostname: 'api.anthropic.com',
-            path:     '/v1/messages',
+            hostname: 'api.openai.com',
+            path:     '/v1/chat/completions',
             method:   'POST',
             headers: {
-                'Content-Type':      'application/json',
-                'Content-Length':    Buffer.byteLength(payload),
-                'x-api-key':         ANTHROPIC_API_KEY,
-                'anthropic-version': '2023-06-01',
+                'Content-Type':   'application/json',
+                'Content-Length': Buffer.byteLength(payload),
+                'Authorization':  `Bearer ${OPENAI_API_KEY}`,
             },
             timeout: REQUEST_TIMEOUT_MS,
         };
@@ -182,22 +168,22 @@ function callClaude(marketData) {
             res.on('data', chunk => { raw += chunk; });
             res.on('end', () => {
                 if (res.statusCode !== 200) {
-                    log('ERROR', `Claude API returned HTTP ${res.statusCode}`, { body: raw.slice(0, 300) });
-                    return reject(new Error(`Claude API HTTP ${res.statusCode}`));
+                    log('ERROR', `OpenAI API returned HTTP ${res.statusCode}`, { body: raw.slice(0, 300) });
+                    return reject(new Error(`OpenAI API HTTP ${res.statusCode}`));
                 }
                 try {
                     const parsed = JSON.parse(raw);
-                    const text = parsed?.content?.[0]?.text ?? '';
+                    const text = parsed?.choices?.[0]?.message?.content ?? '';
                     resolve(text.trim());
                 } catch (e) {
-                    reject(new Error(`Failed to parse Claude response: ${e.message}`));
+                    reject(new Error(`Failed to parse OpenAI response: ${e.message}`));
                 }
             });
         });
 
         req.on('timeout', () => {
             req.destroy();
-            reject(new Error('Claude API request timed out'));
+            reject(new Error('OpenAI API request timed out'));
         });
 
         req.on('error', (e) => reject(e));
@@ -206,7 +192,8 @@ function callClaude(marketData) {
     });
 }
 
-// ── Parse and validate Claude's text into a trade decision ───────────────────
+// ── Parse and validate the AI's JSON text into a trade decision ───────────────
+// The AI decides everything — this function only validates structure, never overrides
 function parseDecision(text) {
     // Strip any accidental markdown fences
     let clean = text.replace(/```json|```/gi, '').trim();
@@ -229,33 +216,20 @@ function parseDecision(text) {
         throw new Error(`Invalid decision value: "${obj.decision}"`);
     }
 
-    // If AI says BUY/SELL but forgot to set sl/tp/lot_size, convert to HOLD
-    const needsNumbers = decision === 'BUY' || decision === 'SELL' ||
-                         decision === 'CLOSE_AND_REVERSE_BUY' || decision === 'CLOSE_AND_REVERSE_SELL';
-    if (needsNumbers) {
-        const sl  = Number(obj.sl  ?? 0);
-        const tp  = Number(obj.tp  ?? 0);
-        const lot = Number(obj.lot_size ?? 0);
-        if (sl <= 0 || tp <= 0 || lot <= 0) {
-            log('WARN', `AI returned ${decision} with zero sl/tp/lot — converting to HOLD`, { sl, tp, lot });
-            return holdResponse(`AI returned ${decision} but entry conditions not fully met (zero sl/tp/lot).`);
-        }
-    }
-
+    // Return exactly what the AI decided — no overrides
     return {
-        decision:     decision,
-        sl:           Number(obj.sl       ?? 0),
-        tp:           Number(obj.tp       ?? 0),
-        lot_size:     Number(obj.lot_size ?? 0),
+        decision,
+        sl:           Number(obj.sl           ?? 0),
+        tp:           Number(obj.tp           ?? 0),
+        lot_size:     Number(obj.lot_size     ?? 0),
         trail_active: Boolean(obj.trail_active ?? false),
-        reason:       String(obj.reason   ?? ''),
+        reason:       String(obj.reason       ?? ''),
     };
 }
 
-// ── Authentication middleware ─────────────────────────────────────────────────
+// ── Authentication ────────────────────────────────────────────────────────────
 function checkAuth(req) {
-    const key = req.headers['x-api-key'] ?? '';
-    return key === BRIDGE_API_KEY;
+    return (req.headers['x-api-key'] ?? '') === BRIDGE_API_KEY;
 }
 
 // ── Request router ────────────────────────────────────────────────────────────
@@ -266,16 +240,15 @@ async function handleRequest(req, res) {
     // ── GET /health ──────────────────────────────────────────────────────────
     if (method === 'GET' && url.pathname === '/health') {
         return sendJson(res, 200, {
-            status:    'ok',
-            model:     MODEL,
-            timestamp: new Date().toISOString(),
-            api_key_set: Boolean(ANTHROPIC_API_KEY),
+            status:      'ok',
+            model:       MODEL,
+            timestamp:   new Date().toISOString(),
+            api_key_set: Boolean(OPENAI_API_KEY),
         });
     }
 
     // ── POST /signal ─────────────────────────────────────────────────────────
     if (method === 'POST' && url.pathname === '/signal') {
-        // Auth check
         if (!checkAuth(req)) {
             log('WARN', 'Rejected request — bad API key');
             return sendJson(res, 401, { error: 'Unauthorized' });
@@ -291,23 +264,22 @@ async function handleRequest(req, res) {
             const parsed = JSON.parse(body);
             marketData = parsed.market_data ?? body;
         } catch {
-            marketData = body; // not JSON — use raw
+            marketData = body;
         }
 
         if (!marketData) {
-            return sendJson(res, 400, holdResponse('Empty market_data received'));
+            return sendJson(res, 400, errorResponse('Empty market_data received'));
         }
 
         log('INFO', `Signal request received (${marketData.length} chars)`);
 
         try {
-            // Call Claude with a per-request timeout race
             const timeoutPromise = new Promise((_, reject) =>
                 setTimeout(() => reject(new Error('Bridge-level timeout')), REQUEST_TIMEOUT_MS)
             );
 
-            const aiText   = await Promise.race([callClaude(marketData), timeoutPromise]);
-            log('INFO', 'Claude raw response', { text: aiText.slice(0, 300) });
+            const aiText   = await Promise.race([callOpenAI(marketData), timeoutPromise]);
+            log('INFO', 'OpenAI raw response', { text: aiText.slice(0, 300) });
 
             const decision = parseDecision(aiText);
             log('INFO', 'Parsed decision', decision);
@@ -316,12 +288,11 @@ async function handleRequest(req, res) {
 
         } catch (err) {
             log('ERROR', `Signal handler error: ${err.message}`);
-            // Always return 200 with HOLD so MT5 doesn't log a comms failure
-            return sendJson(res, 200, holdResponse(`Server error: ${err.message}`));
+            return sendJson(res, 200, errorResponse(`Server error: ${err.message}`));
         }
     }
 
-    // ── 404 for everything else ──────────────────────────────────────────────
+    // ── 404 ──────────────────────────────────────────────────────────────────
     return sendJson(res, 404, { error: 'Not found' });
 }
 
@@ -331,15 +302,15 @@ const server = http.createServer(async (req, res) => {
         await handleRequest(req, res);
     } catch (err) {
         log('ERROR', `Unhandled error: ${err.message}`);
-        try { sendJson(res, 200, holdResponse('Unhandled server error')); } catch (_) {}
+        try { sendJson(res, 200, errorResponse('Unhandled server error')); } catch (_) {}
     }
 });
 
 server.listen(PORT, () => {
     log('INFO', `ChaddyBot bridge listening on port ${PORT}`);
     log('INFO', `Model: ${MODEL}`);
-    log('INFO', `API key configured: ${Boolean(ANTHROPIC_API_KEY)}`);
-    if (!ANTHROPIC_API_KEY) {
-        log('WARN', 'ANTHROPIC_API_KEY is not set — all /signal calls will fail!');
+    log('INFO', `OpenAI API key configured: ${Boolean(OPENAI_API_KEY)}`);
+    if (!OPENAI_API_KEY) {
+        log('WARN', 'OPENAI_API_KEY is not set — all /signal calls will fail!');
     }
 });
