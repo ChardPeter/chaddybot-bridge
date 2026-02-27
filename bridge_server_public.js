@@ -69,17 +69,17 @@ lot_size:  Risk exactly 1% of account balance per trade.
            Formula: lot_size = (balance * 0.01) / (sl_distance_in_pips * pip_value)
            For XAU/USD: pip_value = $1 per 0.01 lot per pip. Round to 2 decimal places.
 
-sl:  Absolute price, 15 pips from entry.
-     For XAU/USD: 1 pip = 0.10 price units, so 15 pips = 1.50 price units.
-     BUY:  sl = ask - 1.50
-     SELL: sl = bid + 1.50
+sl:  Absolute price, 50 pips from entry.
+     For XAU/USD: 1 pip = 0.10 price units, so 50 pips = 5.0 price units.
+     BUY:  sl = ask - 5.0
+     SELL: sl = bid + 5.0
 
 tp:  Absolute price, 300 pips from entry (2:1 RR minimum).
      If ATR14 > 180.0 price units (= 1800 pips): extend TP to 450 pips (45.0 units).
      BUY:  tp = ask + 30.0  (or ask + 45.0 on strong trend days)
      SELL: tp = bid - 30.0  (or bid - 45.0)
 
-Example: ask = 2950.00 → sl = 2948.50, tp = 2980.00
+Example: ask = 2950.00 → sl = 2945.00, tp = 2980.00
 
 TRADE MANAGEMENT — check on every bar with an open position:
 - If open trade P&L pips >= 10:  set trail_active: true
@@ -90,6 +90,7 @@ TRADE MANAGEMENT — check on every bar with an open position:
 
 CAPITAL PROTECTION — NON-NEGOTIABLE:
 - Max loss per trade: 1% of account balance
+
 - Never average down. Never widen SL once set.
 
 LOSS PROTECTION RULE — CRITICAL:
@@ -106,7 +107,7 @@ LOSS PROTECTION RULE — CRITICAL:
 
 EXAMPLES OF CORRECT OUTPUT:
 
-Valid BUY: {"decision":"BUY","sl":2948.50,"tp":2980.00,"lot_size":0.08,"trail_active":false,"reason":"EMA8 crossed above EMA21, RSI 52, last 2 candles bullish, price above EMA50, H1 uptrend confirmed."}
+Valid BUY: {"decision":"BUY","sl":2945.00,"tp":2980.00,"lot_size":0.08,"trail_active":false,"reason":"EMA8 crossed above EMA21, RSI 52, last 2 candles bullish, price above EMA50, H1 uptrend confirmed."}
 
 Trail on: {"decision":"HOLD","sl":0.0,"tp":0.0,"lot_size":0.0,"trail_active":true,"reason":"Trade at +12 pips, trailing stop now active."}
 
