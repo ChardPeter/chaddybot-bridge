@@ -23,6 +23,10 @@ const MODEL              = 'gpt-4o';
 const MAX_TOKENS         = 1024;
 const REQUEST_TIMEOUT_MS = 12000;  // Must be less than MT5 Bridge_Timeout_Sec (15s)
 
+// ── GBP conversion ────────────────────────────────────────────────────────────
+// Update this rate periodically to keep GBP figures accurate.
+const USD_TO_GBP = 0.79;
+
 // ── System prompt (your trading rules) ───────────────────────────────────────
 const SYSTEM_PROMPT = `You are an XAU/USD (Gold) MT5 trading bot. Each bar you receive live market data and must
 return a JSON decision object. Your JSON is parsed directly by MT5 — formatting errors cause
@@ -140,6 +144,73 @@ function errorResponse(reason) {
         trail_active: false,
         reason,
     };
+}
+
+// ── Parse P&L figures from the market_data string ─────────────────────────────
+// Looks for patterns like:
+//   Balance: 1234.56
+//   Floating P&L: 45.67   (or Floating P/L, Float P&L, etc.)
+//   Profit: 45.67
+//
+// All values are expected in USD. Returns null for any field not found.
+function extractPnlData(marketData) {
+    const find = (patterns, text) => {
+        for (const pattern of patterns) {
+            const match = text.match(pattern);
+            if (match) return parseFloat(match[1]);
+        }
+        return null;
+    };
+
+    const balance = find([
+        /[Bb]alance\s*[:=]\s*([\-\d.]+)/,
+        /Account\s+[Bb]alance\s*[:=]\s*([\-\d.]+)/,
+    ], marketData);
+
+    const floatingPnl = find([
+        /[Ff]loating\s+P&L\s*[:=]\s*([\-\d.]+)/,
+        /[Ff]loating\s+P\/L\s*[:=]\s*([\-\d.]+)/,
+        /[Ff]loat(?:ing)?\s+P&L\s*[:=]\s*([\-\d.]+)/,
+        /[Pp]rofit\s*[:=]\s*([\-\d.]+)/,
+        /[Uu]nrealized\s+P&?L\s*[:=]\s*([\-\d.]+)/,
+    ], marketData);
+
+    return { balance, floatingPnl };
+}
+
+// ── Log a GBP P&L summary whenever a closing decision is made ────────────────
+function logGbpPnlSummary(decision, marketData) {
+    const CLOSE_DECISIONS = new Set([
+        'CLOSE', 'CLOSE_AND_REVERSE_BUY', 'CLOSE_AND_REVERSE_SELL',
+    ]);
+    if (!CLOSE_DECISIONS.has(decision)) return;
+
+    const { balance, floatingPnl } = extractPnlData(marketData);
+
+    if (floatingPnl === null) {
+        log('INFO', '💷 GBP P&L summary — could not parse Floating P&L from market data');
+        return;
+    }
+
+    const pnlGbp     = floatingPnl  * USD_TO_GBP;
+    const sign       = pnlGbp >= 0 ? '+' : '';
+    const outcome    = pnlGbp >= 0 ? '✅ PROFIT' : '❌ LOSS';
+
+    log('INFO', `💷 ── CLOSE P&L SUMMARY (${outcome}) ──────────────────────`);
+    log('INFO', `💷   Floating P&L (USD) : $${floatingPnl.toFixed(2)}`);
+    log('INFO', `💷   Floating P&L (GBP) : ${sign}£${Math.abs(pnlGbp).toFixed(2)}`);
+
+    if (balance !== null) {
+        const balanceGbp    = balance      * USD_TO_GBP;
+        const balanceAfter  = balance      + floatingPnl;
+        const balanceAfterG = balanceAfter * USD_TO_GBP;
+
+        log('INFO', `💷   Balance before (USD): $${balance.toFixed(2)}  →  £${balanceGbp.toFixed(2)}`);
+        log('INFO', `💷   Balance after  (USD): $${balanceAfter.toFixed(2)}  →  £${balanceAfterG.toFixed(2)}`);
+    }
+
+    log('INFO', `💷   USD→GBP rate used   : ${USD_TO_GBP}`);
+    log('INFO',  '💷 ─────────────────────────────────────────────────────────');
 }
 
 // ── Call OpenAI API ───────────────────────────────────────────────────────────
@@ -294,6 +365,9 @@ async function handleRequest(req, res) {
             const decision = parseDecision(aiText);
             log('INFO', 'Parsed decision', decision);
 
+            // ── GBP P&L summary on any close decision ────────────────────────
+            logGbpPnlSummary(decision.decision, marketData);
+
             return sendJson(res, 200, decision);
 
         } catch (err) {
@@ -324,6 +398,3 @@ server.listen(PORT, () => {
         log('WARN', 'OPENAI_API_KEY is not set — all /signal calls will fail!');
     }
 });
-
-
-
