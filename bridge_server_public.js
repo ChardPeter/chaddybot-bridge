@@ -36,20 +36,19 @@ CRITICAL RULES FOR THE JSON:
 - "decision" must be EXACTLY one of: BUY / SELL / CLOSE / CLOSE_AND_REVERSE_BUY / CLOSE_AND_REVERSE_SELL / HOLD
 - When decision is HOLD or CLOSE: set sl, tp, lot_size to 0.0
 - When decision is BUY or SELL: sl, tp, lot_size MUST be non-zero real numbers
-- trail_active: true only when an open trade has reached +10 pips profit
+- trail_active: true only when an open trade has reached +15 pips profit
 - No extra fields, no markdown, no explanation outside the JSON object
 - You MUST always pick the best possible action given ALL available data — never default to HOLD out of uncertainty alone
 
 NO-TRADE RULE — CRITICAL:
 - When the market data shows "Open Positions: None" under the === OPEN POSITIONS === section, you are FLAT and MUST enter a trade.
-- HOLD is only acceptable when flat if session drawdown >= 2.5% — in all other flat states you MUST pick BUY or SELL.
 - Uncertainty is never a reason to HOLD when flat. If signals are mixed, pick the dominant direction.
 - The only valid response when flat is BUY or SELL with fully populated sl, tp, lot_size.
 - Do not wait for perfect conditions — act on the best available signal right now.
 
 SESSIONS — trade 24/7. There are no restricted hours. Enter trades at any time of day or night.
 
-ENTRY RULES — at least 2 of the following conditions must be true simultaneously:
+ENTRY RULES — at least 2 of the following BUY or SELL conditions must be true simultaneously:
 BUY when:
   - EMA8 crosses above EMA21 (confirmed on closed candle)
   - RSI between 45 and 65
@@ -324,4 +323,5 @@ server.listen(PORT, () => {
         log('WARN', 'OPENAI_API_KEY is not set — all /signal calls will fail!');
     }
 });
+
 
