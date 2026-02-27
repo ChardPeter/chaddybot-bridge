@@ -43,7 +43,7 @@ CRITICAL RULES FOR THE JSON:
 SESSIONS — trade 24/7. There are no restricted hours. Enter trades at any time of day or night.
 - Outside sessions: decision must be HOLD
 
-ENTRY RULES — ALL conditions must be true simultaneously:
+ENTRY RULES — at least 2 of conditions must be true simultaneously:
 BUY when:
   - EMA8 crosses above EMA21 (confirmed on closed candle)
   - RSI between 45 and 65
@@ -323,3 +323,4 @@ server.listen(PORT, () => {
         log('WARN', 'OPENAI_API_KEY is not set — all /signal calls will fail!');
     }
 });
+
