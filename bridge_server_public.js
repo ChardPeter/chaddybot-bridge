@@ -36,7 +36,7 @@ CRITICAL RULES FOR THE JSON:
 - "decision" must be EXACTLY one of: BUY / SELL / CLOSE / CLOSE_AND_REVERSE_BUY / CLOSE_AND_REVERSE_SELL / HOLD
 - When decision is HOLD or CLOSE: set sl, tp, lot_size to 0.0
 - When decision is BUY or SELL: sl, tp, lot_size MUST be non-zero real numbers
-- trail_active: true only when an open trade has reached +15 pips profit
+- trail_active: true only when an open trade has reached +50 pips profit
 - No extra fields, no markdown, no explanation outside the JSON object
 - You MUST always pick the best possible action given ALL available data — never default to HOLD out of uncertainty alone
 
@@ -63,10 +63,10 @@ SELL when:
   - Price is below EMA50
   - H1 trend is DOWN or NEUTRAL
 
-TRADE PARAMETERS — calculate and return exact prices:
-lot_size:  Risk exactly 1% of account balance per trade.
-           Formula: lot_size = (balance * 0.01) / (sl_distance_in_pips * pip_value)
-           For XAU/USD: pip_value = $1 per 0.01 lot per pip. Round to 2 decimal places.
+// TRADE PARAMETERS — calculate and return exact prices:
+// lot_size:  Risk exactly 1% of account balance per trade.
+//            Formula: lot_size = (balance * 0.01) / (sl_distance_in_pips * pip_value)
+//            For XAU/USD: pip_value = $1 per 0.01 lot per pip. Round to 2 decimal places.
 
 sl:  Absolute price, 50 pips from entry.
      For XAU/USD: 1 pip = 0.10 price units, so 50 pips = 5.0 price units.
@@ -81,14 +81,15 @@ tp:  Absolute price, 300 pips from entry (2:1 RR minimum).
 Example: ask = 2950.00 → sl = 2945.00, tp = 2980.00
 
 TRADE MANAGEMENT — check on every bar with an open position:
-- If open trade P&L pips >= 15:  set trail_active: true
+- If open trade P&L pips >= 50:  set trail_active: true
 - If open trade P&L pips >= 300:  return HOLD (trail handles it)
-- If open trade moves 80 pips adverse AND M1 momentum reversed: decision = CLOSE
-- If price stalls 10+ candles with no progress toward TP: decision = CLOSE
+- lot size must always be 0.01
+// - If open trade moves 80 pips adverse AND M1 momentum reversed: decision = CLOSE
+// - If price stalls 10+ candles with no progress toward TP: decision = CLOSE
 - If major news spike occurs against position: decision = CLOSE immediately
 
-CAPITAL PROTECTION — NON-NEGOTIABLE:
-- Max loss per trade: 1% of account balance
+// CAPITAL PROTECTION — NON-NEGOTIABLE:
+// - Max loss per trade: 1% of account balance
 
 - Never average down. Never widen SL once set.
 
@@ -323,5 +324,6 @@ server.listen(PORT, () => {
         log('WARN', 'OPENAI_API_KEY is not set — all /signal calls will fail!');
     }
 });
+
 
 
