@@ -20,8 +20,8 @@ const PORT               = process.env.PORT          || 3000;
 const BRIDGE_API_KEY     = process.env.BRIDGE_API_KEY || '1234';
 const OPENAI_API_KEY     = process.env.OPENAI_API_KEY || '';
 const MODEL              = 'gpt-4o';
-const MAX_TOKENS         = 512;
-const REQUEST_TIMEOUT_MS = 25000;
+const MAX_TOKENS         = 1024;
+const REQUEST_TIMEOUT_MS = 12000;  // Must be less than MT5 Bridge_Timeout_Sec (15s)
 
 // ── System prompt (your trading rules) ───────────────────────────────────────
 const SYSTEM_PROMPT = `You are an XAU/USD (Gold) MT5 trading bot. Each bar you receive live market data and must
@@ -41,7 +41,7 @@ CRITICAL RULES FOR THE JSON:
 - You MUST always pick the best possible action given ALL available data — never default to HOLD out of uncertainty alone
 
 NO-TRADE RULE — CRITICAL:
-- When the market data shows "Open Positions: None", you are FLAT and MUST enter a trade.
+- When the market data shows "Open Positions: None" under the === OPEN POSITIONS === section, you are FLAT and MUST enter a trade.
 - HOLD is only acceptable when flat if session drawdown >= 2.5% — in all other flat states you MUST pick BUY or SELL.
 - Uncertainty is never a reason to HOLD when flat. If signals are mixed, pick the dominant direction.
 - The only valid response when flat is BUY or SELL with fully populated sl, tp, lot_size.
@@ -90,7 +90,6 @@ TRADE MANAGEMENT — check on every bar with an open position:
 
 CAPITAL PROTECTION — NON-NEGOTIABLE:
 - Max loss per trade: 1% of account balance
-- Session drawdown >= 2.5%: decision = HOLD for ALL remaining bars this session
 - Never average down. Never widen SL once set.
 
 LOSS PROTECTION RULE — CRITICAL:
@@ -111,7 +110,7 @@ Valid BUY: {"decision":"BUY","sl":2948.50,"tp":2980.00,"lot_size":0.08,"trail_ac
 
 Trail on: {"decision":"HOLD","sl":0.0,"tp":0.0,"lot_size":0.0,"trail_active":true,"reason":"Trade at +12 pips, trailing stop now active."}
 
-Close:    {"decision":"CLOSE","sl":0.0,"tp":0.0,"lot_size":0.0,"trail_active":false,"reason":"Price moved 80 pips adverse and M1 momentum reversed bearish."}\`;
+Close:    {"decision":"CLOSE","sl":0.0,"tp":0.0,"lot_size":0.0,"trail_active":false,"reason":"Price moved 80 pips adverse and M1 momentum reversed bearish."}`;
 
 // ── Logging ───────────────────────────────────────────────────────────────────
 function log(level, msg, data) {
