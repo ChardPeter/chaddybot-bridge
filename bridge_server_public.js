@@ -20,7 +20,7 @@ const PORT               = process.env.PORT          || 3000;
 const BRIDGE_API_KEY     = process.env.BRIDGE_API_KEY || '1234';
 const OPENAI_API_KEY     = process.env.OPENAI_API_KEY || '';
 const MODEL              = 'gpt-4o';
-const MAX_TOKENS         = 3000;
+const MAX_TOKENS         = 512;
 const REQUEST_TIMEOUT_MS = 25000;
 
 // ── System prompt (your trading rules) ───────────────────────────────────────
@@ -30,23 +30,23 @@ missed trades.
 
 REQUIRED OUTPUT FORMAT — return ONLY valid JSON, nothing else, no markdown fences:
 
-{"decision":"","sl":,"tp":,"lot_size":,"trail_active":,"reason":""}
+{"decision":"HOLD","sl":0.0,"tp":0.0,"lot_size":0.0,"trail_active":false,"reason":"one sentence"}
 
 CRITICAL RULES FOR THE JSON:
-- never say hold
-- "decision" must be EXACTLY one of: BUY / SELL / CLOSE / CLOSE_AND_REVERSE_BUY / CLOSE_AND_REVERSE_SELL 
-- When decision is CLOSE: set sl, tp, lot_size to 0.0
+- "decision" must be EXACTLY one of: BUY / SELL / CLOSE / CLOSE_AND_REVERSE_BUY / CLOSE_AND_REVERSE_SELL / HOLD
+- When decision is HOLD or CLOSE: set sl, tp, lot_size to 0.0
 - When decision is BUY or SELL: sl, tp, lot_size MUST be non-zero real numbers
-- trail_active: true only when an open trade has reached +15 pips profit
+- trail_active: true only when an open trade has reached +150 pips profit
 - No extra fields, no markdown, no explanation outside the JSON object
 - You MUST always pick the best possible action given ALL available data — never default to HOLD out of uncertainty alone
 
 SESSIONS — only trade during these GMT windows:
-- London open:     00:00–23:59 GMT  (highest gold liquidity)
+- London open:     07:00–10:00 GMT  (highest gold liquidity)
+- NY open overlap: 12:00–15:00 GMT  (strongest momentum)
+- AVOID:           20:00–00:00 GMT  (thin liquidity, stop hunts common)
+- Outside sessions: decision must be HOLD
 
-
-
-ENTRY RULES — any 2 conditions must be true simultaneously:
+ENTRY RULES — ALL conditions must be true simultaneously:
 BUY when:
   - EMA8 crosses above EMA21 (confirmed on closed candle)
   - RSI between 45 and 65
@@ -61,6 +61,11 @@ SELL when:
   - Price is below EMA50
   - H1 trend is DOWN or NEUTRAL
 
+NEVER enter if:
+  - RSI above 75 or below 25 (overextended)
+  - Within 10 minutes of a red-folder news event (NFP, CPI, FOMC, Fed speakers)
+  - Session drawdown has reached 2.5% — return HOLD for the rest of the session
+  - 3 consecutive losses in the session — return HOLD, session done
 
 TRADE PARAMETERS — calculate and return exact prices:
 lot_size:  Risk exactly 1% of account balance per trade.
@@ -92,16 +97,23 @@ REVERSAL RULES:
 - RSI must confirm (>50 for buys, <50 for sells)
 - Use 50% of normal lot size
 - decision = CLOSE_AND_REVERSE_BUY or CLOSE_AND_REVERSE_SELL
-- Maximum 2 reversals per session 
+- Maximum 2 reversals per session — after that, HOLD only
 
 CAPITAL PROTECTION — NON-NEGOTIABLE:
 - Max loss per trade: 1% of account balance
-
+- Session drawdown >= 2.5%: decision = HOLD for ALL remaining bars this session
+- After 3 consecutive losses: decision = HOLD, session is done
 - Never average down. Never widen SL once set.
 
 EXAMPLES OF CORRECT OUTPUT:
 
-signal: {"decision":"","sl":,"tp":,"lot_size":0.01,"trail_active":,"reason":""}`;
+No signal: {"decision":"HOLD","sl":0.0,"tp":0.0,"lot_size":0.0,"trail_active":false,"reason":"EMA crossover not confirmed, RSI at 38 below BUY threshold."}
+
+Valid BUY: {"decision":"BUY","sl":2935.00,"tp":2980.00,"lot_size":0.08,"trail_active":false,"reason":"EMA8 crossed above EMA21, RSI 52, last 2 candles bullish, price above EMA50, H1 uptrend confirmed."}
+
+Trail on: {"decision":"HOLD","sl":0.0,"tp":0.0,"lot_size":0.0,"trail_active":true,"reason":"Trade at +160 pips, trailing stop now active."}
+
+Close:    {"decision":"CLOSE","sl":0.0,"tp":0.0,"lot_size":0.0,"trail_active":false,"reason":"Price moved 80 pips adverse and M15 momentum reversed bearish."}`;
 
 // ── Logging ───────────────────────────────────────────────────────────────────
 function log(level, msg, data) {
@@ -314,4 +326,3 @@ server.listen(PORT, () => {
         log('WARN', 'OPENAI_API_KEY is not set — all /signal calls will fail!');
     }
 });
-
