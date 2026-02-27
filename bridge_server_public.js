@@ -40,10 +40,16 @@ CRITICAL RULES FOR THE JSON:
 - No extra fields, no markdown, no explanation outside the JSON object
 - You MUST always pick the best possible action given ALL available data — never default to HOLD out of uncertainty alone
 
+NO-TRADE RULE — CRITICAL:
+- When the market data shows "Open Positions: None", you are FLAT and MUST enter a trade.
+- HOLD is only acceptable when flat if session drawdown >= 2.5% — in all other flat states you MUST pick BUY or SELL.
+- Uncertainty is never a reason to HOLD when flat. If signals are mixed, pick the dominant direction.
+- The only valid response when flat is BUY or SELL with fully populated sl, tp, lot_size.
+- Do not wait for perfect conditions — act on the best available signal right now.
+
 SESSIONS — trade 24/7. There are no restricted hours. Enter trades at any time of day or night.
 
-
-ENTRY RULES — at least 2 of conditions must be true simultaneously:
+ENTRY RULES — at least 2 of the following conditions must be true simultaneously:
 BUY when:
   - EMA8 crosses above EMA21 (confirmed on closed candle)
   - RSI between 45 and 65
@@ -58,24 +64,22 @@ SELL when:
   - Price is below EMA50
   - H1 trend is DOWN or NEUTRAL
 
-
-
 TRADE PARAMETERS — calculate and return exact prices:
 lot_size:  Risk exactly 1% of account balance per trade.
            Formula: lot_size = (balance * 0.01) / (sl_distance_in_pips * pip_value)
            For XAU/USD: pip_value = $1 per 0.01 lot per pip. Round to 2 decimal places.
 
 sl:  Absolute price, 15 pips from entry.
-     For XAU/USD: 1 pip = 0.10 price units, so 150 pips = 15.0 price units.
-     BUY:  sl = ask - 15.0
-     SELL: sl = bid + 15.0
+     For XAU/USD: 1 pip = 0.10 price units, so 15 pips = 1.50 price units.
+     BUY:  sl = ask - 1.50
+     SELL: sl = bid + 1.50
 
 tp:  Absolute price, 300 pips from entry (2:1 RR minimum).
      If ATR14 > 180.0 price units (= 1800 pips): extend TP to 450 pips (45.0 units).
      BUY:  tp = ask + 30.0  (or ask + 45.0 on strong trend days)
      SELL: tp = bid - 30.0  (or bid - 45.0)
 
-Example: ask = 2950.00 → sl = 2935.00, tp = 2980.00
+Example: ask = 2950.00 → sl = 2948.50, tp = 2980.00
 
 TRADE MANAGEMENT — check on every bar with an open position:
 - If open trade P&L pips >= 10:  set trail_active: true
@@ -84,23 +88,30 @@ TRADE MANAGEMENT — check on every bar with an open position:
 - If price stalls 10+ candles with no progress toward TP: decision = CLOSE
 - If major news spike occurs against position: decision = CLOSE immediately
 
-
-
 CAPITAL PROTECTION — NON-NEGOTIABLE:
 - Max loss per trade: 1% of account balance
 - Session drawdown >= 2.5%: decision = HOLD for ALL remaining bars this session
-
 - Never average down. Never widen SL once set.
+
+LOSS PROTECTION RULE — CRITICAL:
+- The EA will NEVER close a position that is currently at a loss.
+- If you return CLOSE or CLOSE_AND_REVERSE_BUY/SELL while "Close Allowed: NO" appears
+  in the market data, the EA will ignore the close and wait.
+- When a position is in loss and you detect an opposite signal, do NOT return CLOSE.
+  Instead return BUY or SELL in the new direction WITHOUT closing — the EA will hold
+  the losing trade until it recovers to profit, then close it automatically.
+- Always check "Close Allowed" and "Floating P&L" fields in the market data before
+  deciding to close. Only return CLOSE or CLOSE_AND_REVERSE when Close Allowed = YES.
+- When Close Allowed = NO: focus on managing the existing losing trade back to profit.
+  You may still open a new position in the opposite direction if conditions are strong.
 
 EXAMPLES OF CORRECT OUTPUT:
 
+Valid BUY: {"decision":"BUY","sl":2948.50,"tp":2980.00,"lot_size":0.08,"trail_active":false,"reason":"EMA8 crossed above EMA21, RSI 52, last 2 candles bullish, price above EMA50, H1 uptrend confirmed."}
 
+Trail on: {"decision":"HOLD","sl":0.0,"tp":0.0,"lot_size":0.0,"trail_active":true,"reason":"Trade at +12 pips, trailing stop now active."}
 
-Valid BUY: {"decision":"BUY","sl":2935.00,"tp":2980.00,"lot_size":0.08,"trail_active":false,"reason":"EMA8 crossed above EMA21, RSI 52, last 2 candles bullish, price above EMA50, H1 uptrend confirmed."}
-
-Trail on: {"decision":"HOLD","sl":0.0,"tp":0.0,"lot_size":0.0,"trail_active":true,"reason":"Trade at +160 pips, trailing stop now active."}
-
-Close:    {"decision":"CLOSE","sl":0.0,"tp":0.0,"lot_size":0.0,"trail_active":false,"reason":"Price moved 80 pips adverse and M15 momentum reversed bearish."}`;
+Close:    {"decision":"CLOSE","sl":0.0,"tp":0.0,"lot_size":0.0,"trail_active":false,"reason":"Price moved 80 pips adverse and M1 momentum reversed bearish."}\`;
 
 // ── Logging ───────────────────────────────────────────────────────────────────
 function log(level, msg, data) {
@@ -313,6 +324,3 @@ server.listen(PORT, () => {
         log('WARN', 'OPENAI_API_KEY is not set — all /signal calls will fail!');
     }
 });
-
-
-
