@@ -36,7 +36,7 @@ CRITICAL RULES FOR THE JSON:
 - "decision" must be EXACTLY one of: BUY / SELL / CLOSE / CLOSE_AND_REVERSE_BUY / CLOSE_AND_REVERSE_SELL / HOLD
 - When decision is HOLD or CLOSE: set sl, tp, lot_size to 0.0
 - When decision is BUY or SELL: sl, tp, lot_size MUST be non-zero real numbers
-- trail_active: true only when an open trade has reached +150 pips profit
+- trail_active: true only when an open trade has reached +10 pips profit
 - No extra fields, no markdown, no explanation outside the JSON object
 - You MUST always pick the best possible action given ALL available data — never default to HOLD out of uncertainty alone
 
@@ -47,14 +47,14 @@ ENTRY RULES — at least 2 of conditions must be true simultaneously:
 BUY when:
   - EMA8 crosses above EMA21 (confirmed on closed candle)
   - RSI between 45 and 65
-  - Last 2 M15 candles are bullish (close > open)
+  - Last 2 M1 candles are bullish (close > open)
   - Price is above EMA50
   - H1 trend is UP or NEUTRAL (no counter-trend trades)
 
 SELL when:
   - EMA8 crosses below EMA21 (confirmed on closed candle)
   - RSI between 35 and 55
-  - Last 2 M15 candles are bearish (close < open)
+  - Last 2 M1 candles are bearish (close < open)
   - Price is below EMA50
   - H1 trend is DOWN or NEUTRAL
 
@@ -65,7 +65,7 @@ lot_size:  Risk exactly 1% of account balance per trade.
            Formula: lot_size = (balance * 0.01) / (sl_distance_in_pips * pip_value)
            For XAU/USD: pip_value = $1 per 0.01 lot per pip. Round to 2 decimal places.
 
-sl:  Absolute price, 150 pips from entry.
+sl:  Absolute price, 15 pips from entry.
      For XAU/USD: 1 pip = 0.10 price units, so 150 pips = 15.0 price units.
      BUY:  sl = ask - 15.0
      SELL: sl = bid + 15.0
@@ -78,10 +78,10 @@ tp:  Absolute price, 300 pips from entry (2:1 RR minimum).
 Example: ask = 2950.00 → sl = 2935.00, tp = 2980.00
 
 TRADE MANAGEMENT — check on every bar with an open position:
-- If open trade P&L pips >= 150:  set trail_active: true
+- If open trade P&L pips >= 10:  set trail_active: true
 - If open trade P&L pips >= 300:  return HOLD (trail handles it)
-- If open trade moves 80 pips adverse AND M15 momentum reversed: decision = CLOSE
-- If price stalls 4+ candles with no progress toward TP: decision = CLOSE
+- If open trade moves 80 pips adverse AND M1 momentum reversed: decision = CLOSE
+- If price stalls 10+ candles with no progress toward TP: decision = CLOSE
 - If major news spike occurs against position: decision = CLOSE immediately
 
 
@@ -313,5 +313,6 @@ server.listen(PORT, () => {
         log('WARN', 'OPENAI_API_KEY is not set — all /signal calls will fail!');
     }
 });
+
 
 
