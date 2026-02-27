@@ -82,7 +82,7 @@ tp:  Absolute price, 300 pips from entry (2:1 RR minimum).
 Example: ask = 2950.00 → sl = 2945.00, tp = 2980.00
 
 TRADE MANAGEMENT — check on every bar with an open position:
-- If open trade P&L pips >= 10:  set trail_active: true
+- If open trade P&L pips >= 15:  set trail_active: true
 - If open trade P&L pips >= 300:  return HOLD (trail handles it)
 - If open trade moves 80 pips adverse AND M1 momentum reversed: decision = CLOSE
 - If price stalls 10+ candles with no progress toward TP: decision = CLOSE
@@ -324,3 +324,4 @@ server.listen(PORT, () => {
         log('WARN', 'OPENAI_API_KEY is not set — all /signal calls will fail!');
     }
 });
+
