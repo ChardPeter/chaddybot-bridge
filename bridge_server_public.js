@@ -87,7 +87,7 @@ Example: ask = 2950.00 → sl = 2945.00, tp = 2980.00
 TRADE MANAGEMENT — check on every bar with an open position:
 - If open trade P&L pips >= 50:  set trail_active: true
 - If open trade P&L pips >= 300:  return HOLD (trail handles it)
-- lot size must always be 0.01
+- lot size must always be 0.1
 // - If open trade moves 80 pips adverse AND M1 momentum reversed: decision = CLOSE
 // - If price stalls 10+ candles with no progress toward TP: decision = CLOSE
 - If major news spike occurs against position: decision = CLOSE immediately
@@ -398,3 +398,4 @@ server.listen(PORT, () => {
         log('WARN', 'OPENAI_API_KEY is not set — all /signal calls will fail!');
     }
 });
+
